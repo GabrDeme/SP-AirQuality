@@ -66,6 +66,8 @@ def on_message(client, userdata, msg):
                 co2=co2,
                 tempo_registro=timestamp
             )
+            
+            
 
             # Adiciona o novo registro ao banco de dados
             mydb.session.add(new_data)
@@ -219,34 +221,14 @@ def criar_leitura():
         print("Erro:", e)
         return gera_resposta(400, {}, "Erro ao cadastrar leitura")
 
-
-# PUT - Atualiza leitura
-@app.route("/leitura/<int:idLeitura>", methods=["PUT"])
-def atualizar_leitura(idLeitura):
-    leitura = Leituras.query.filter_by(idLeitura=idLeitura).first()
-    if not leitura:
-        return gera_resposta(404, {}, "Leitura não encontrada")
-
-    requisicao = request.get_json()
-    try:
-        for campo in [
-            "data_hora",
-            "co2",
-            "umidade",
-            "pressao",
-            "temperatura",
-            "poeira_1",
-            "poeira_2",
-            "altitude",
-        ]:
-            if campo in requisicao:
-                setattr(leitura, campo, requisicao[campo])
-
-        mydb.session.commit()
-        return gera_resposta(200, leitura.to_json(), "Leitura atualizada com sucesso")
-    except Exception as e:
-        print("Erro:", e)
-        return gera_resposta(400, {}, "Erro ao atualizar leitura")
+# GET - Poluentes por idLeitura
+@app.route("/poluente/leitura/<int:idLeitura>", methods=["GET"])
+def get_poluentes_by_leitura(idLeitura):
+    poluentes = Poluentes.query.filter_by(idLeitura=idLeitura).all()
+    if not poluentes:
+        return gera_resposta(404, [], f"Nenhum poluente encontrado para a leitura com ID {idLeitura}")
+    poluentes_json = [p.to_json() for p in poluentes]
+    return gera_resposta(200, poluentes_json)
 
 # =================================================================================== #
 # Requisições API - Poluentes
@@ -286,26 +268,6 @@ def criar_poluente():
     except Exception as e:
         print("Erro:", e)
         return gera_resposta(400, {}, "Erro ao cadastrar poluente")
-
-
-# PUT - Atualiza poluente
-@app.route("/poluente/<int:idPoluente>", methods=["PUT"])
-def atualizar_poluente(idPoluente):
-    poluente = Poluentes.query.filter_by(idPoluente=idPoluente).first()
-    if not poluente:
-        return gera_resposta(404, {}, "Poluente não encontrado")
-
-    requisicao = request.get_json()
-    try:
-        for campo in ["idLeitura", "nome", "valor", "unidade"]:
-            if campo in requisicao:
-                setattr(poluente, campo, requisicao[campo])
-
-        mydb.session.commit()
-        return gera_resposta(200, poluente.to_json(), "Poluente atualizado com sucesso")
-    except Exception as e:
-        print("Erro:", e)
-        return gera_resposta(400, {}, "Erro ao atualizar poluente")
 
 # =================================================================================== #
 # Requisições API - Qualidade
@@ -358,6 +320,14 @@ def cria_qualidade():
         print('Erro:', e)
         return gera_resposta(400, {}, "Erro ao criar registro de qualidade.")
     
+# GET - Qualidade por idLeitura
+@app.route("/qualidade/leitura/<int:idLeitura>", methods=["GET"])
+def get_qualidade_by_leitura(idLeitura):
+    qualidade = Qualidade.query.filter_by(idLeitura=idLeitura).all()
+    if not qualidade:
+        return gera_resposta(404, [], f"Nenhuma qualidade encontrada para a leitura com ID {idLeitura}")
+    qualidade_json = [q.to_json() for q in qualidade]
+    return gera_resposta(200, qualidade_json)
 # =================================================================================== #
 # Requisições API - Recomendações
 # =================================================================================== #
@@ -405,6 +375,15 @@ def cria_recomendacao():
         print('Erro:', e)
         return gera_resposta(400, {}, "Erro ao criar recomendação.")
     
+
+# GET - Recomendações por idLeitura
+@app.route("/recomendacao/leitura/<int:idLeitura>", methods=["GET"])
+def get_recomendacoes_by_leitura(idLeitura):
+    recomendacoes = Recomendacao.query.filter_by(idLeitura=idLeitura).all()
+    if not recomendacoes:
+        return gera_resposta(404, [], f"Nenhuma recomendação encontrada para a leitura com ID {idLeitura}")
+    recomendacoes_json = [r.to_json() for r in recomendacoes]
+    return gera_resposta(200, recomendacoes_json)
 
 
 if __name__ == "__main__":
