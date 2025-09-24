@@ -58,15 +58,50 @@ class Poluentes(mydb.Model):
             "unidade": self.unidade,
             }
 
+class Qualidade(mydb.Model):
+    __tablename__ = 'tb_qualidade'
+    idQualidade = mydb.Column(mydb.Integer, primary_key=True)
+    idLeitura = mydb.Column(mydb.String(255))
+    aqi = mydb.Column(mydb.String(255))
+    red = mydb.Column(mydb.String(255))
+    green = mydb.Column(mydb.String(255))
+    blue = mydb.Column(mydb.String(255))
+    category = mydb.Column(mydb.String(255))
+    poluenteDominante = mydb.Column(mydb.String(255))
+    
+    def to_json(self):
+        return {
+            "idQualidade": self.idQualidade,
+            "idLeitura": self.idLeitura,
+            "aqi": self.aqi,
+            "red": self.red,
+            "green": self.green,
+            "blue": self.blue,
+            "category": self.category,
+            "poluenteDominante": self.poluenteDominante
+        }
 
-# -----------------------------
-# Função auxiliar de resposta
-# -----------------------------
-def gera_resposta(status, conteudo, mensagem=False):
-    body = {"conteudo": conteudo}
-    if mensagem:
-        body["mensagem"] = mensagem
-    return Response(json.dumps(body), status=status, mimetype="application/json")
+class Recomendacao(mydb.Model):
+    __tablename__ = 'tb_recomendacao'
+    idRecomendacao = mydb.Column(mydb.Integer, primary_key=True)
+    idLeitura = mydb.Column(mydb.String(255))
+    publico_alvo = mydb.Column(mydb.String(255))
+    recomendacao = mydb.Column(mydb.String(1000))
+    
+    def to_json(self):
+        return {
+            "idRecomendacao": self.idRecomendacao,
+            "idLeitura": self.idLeitura,
+            "publico_alvo": self.publico_alvo,
+            "recomendacao": self.recomendacao
+        }
+    
+
+
+# Configuração de conexão com o banco
+# %40 -> faz o papel de @
+# 1 - Usuario (root) 2 - Senha(Senai540134) 3 - localhost (127.0.0.1) 4 - nome do banco
+app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:Senai%40134@127.0.0.1/db_aqi"
 
 
 # -----------------------------
@@ -198,8 +233,98 @@ def atualizar_poluente(idPoluente):
         return gera_resposta(400, {}, "Erro ao atualizar poluente")
 
 
+def cria_qualidade():
+    body = request.get_json()
+    try:
+        nova_qualidade = Qualidade(
+            idLeitura=body.get('idLeitura'),
+            aqi=body.get('aqi'),
+            red=body.get('red'),
+            green=body.get('green'),
+            blue=body.get('blue'),
+            category=body.get('category'),
+            poluenteDominante=body.get('poluenteDominante')
+        )
+        mydb.session.add(nova_qualidade)
+        mydb.session.commit()
+        return gera_resposta(201, nova_qualidade.to_json(), "Registro de qualidade criado com sucesso.")
+    except Exception as e:
+        print('Erro:', e)
+        return gera_resposta(400, {}, "Erro ao criar registro de qualidade.")
+
+@app.route('/qualidade', methods=['GET'])
+def get_qualidades():
+    try:
+        qualidades = Qualidade.query.all()
+        if not qualidades:
+            return gera_resposta(404, [], "Nenhuma qualidade encontrada.")
+        
+        qualidades_json = [q.to_json() for q in qualidades]
+        return gera_resposta(200, qualidades_json)
+    except Exception as e:
+        print('Erro:', e)
+        return gera_resposta(500, {}, "Ocorreu um erro interno no servidor.")
+    
+@app.route('/qualidade/<int:id>', methods=['GET'])
+def get_qualidade_por_id(id):
+    try:
+        qualidade = Qualidade.query.get(id)
+        if not qualidade:
+            return gera_resposta(404, {}, f"Qualidade com ID {id} não encontrada.")
+        return gera_resposta(200, qualidade.to_json())
+    except Exception as e:
+        print('Erro:', e)
+        return gera_resposta(500, {}, "Ocorreu um erro interno no servidor.")
+    
+@app.route('/recomendacao', methods=['POST'])
+def cria_recomendacao():
+    body = request.get_json()
+    try:
+        nova_recomendacao = Recomendacao(
+            idLeitura=body.get('idLeitura'),
+            publico_alvo=body.get('publico_alvo'),
+            recomendacao=body.get('recomendacao')
+        )
+        mydb.session.add(nova_recomendacao)
+        mydb.session.commit()
+        return gera_resposta(201, nova_recomendacao.to_json(), "Recomendação criada com sucesso.")
+    except Exception as e:
+        print('Erro:', e)
+        return gera_resposta(400, {}, "Erro ao criar recomendação.")
+
+@app.route('/recomendacao', methods=['GET'])
+def get_recomendacoes():
+    try:
+        recomendacoes = Recomendacao.query.all()
+        if not recomendacoes:
+            return gera_resposta(404, [], "Nenhuma recomendação encontrada.")
+        
+        recomendacoes_json = [r.to_json() for r in recomendacoes]
+        return gera_resposta(200, recomendacoes_json)
+    except Exception as e:
+        print('Erro:', e)
+        return gera_resposta(500, {}, "Ocorreu um erro interno no servidor.")
+
+@app.route('/recomendacao/<int:id>', methods=['GET'])
+def get_recomendacao_por_id(id):
+    try:
+        recomendacao = Recomendacao.query.get(id)
+        if not recomendacao:
+            return gera_resposta(404,{}, f"Recomendação com ID {id} não encontrada.")
+        return gera_resposta(200, recomendacao.to_json())
+    except Exception as e:
+        print('Erro:', e)
+        return gera_resposta(500, {}, "Ocorreu um erro interno no servidor.")
+
+    
 # -----------------------------
-# Inicialização
+# Função auxiliar de resposta
 # -----------------------------
+def gera_resposta(status, conteudo, mensagem=False):
+    body = {"conteudo": conteudo}
+    if mensagem:
+        body["mensagem"] = mensagem
+    return Response(json.dumps(body), status=status, mimetype="application/json")
+
 if __name__ == "__main__":
     app.run(port=5000, host="localhost", debug=True)
