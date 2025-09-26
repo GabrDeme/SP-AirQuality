@@ -13,7 +13,7 @@ GOOGLE_AQI_API_URL_HISTORY = "https://airquality.googleapis.com/v1/history:looku
 def get_historical_air_quality(datetime_obj):
 
     # api_key = os.getenv("GOOGLE_API_KEY")
-    api_key = ''
+    api_key = 'AIzaSyB1wfVMwp53FSLn_DqhyAzgcIwmAtCciOU'
     if not api_key:
         print("Erro: Chave de API do Google não encontrada.")
         return None
@@ -28,7 +28,7 @@ def get_historical_air_quality(datetime_obj):
         },
         "extraComputations": [
             "HEALTH_RECOMMENDATIONS",
-            "POLLUTANT_ADDITIONAL_INFO"
+            "POLLUTANT_CONCENTRATION"
         ],
         "languageCode": "pt-br"
     }
