@@ -12,7 +12,8 @@ GOOGLE_AQI_API_URL_HISTORY = "https://airquality.googleapis.com/v1/history:looku
 
 def get_historical_air_quality(datetime_obj):
 
-    api_key = os.getenv("GOOGLE_API_KEY")
+    # api_key = os.getenv("GOOGLE_API_KEY")
+    api_key = ''
     if not api_key:
         print("Erro: Chave de API do Google não encontrada.")
         return None

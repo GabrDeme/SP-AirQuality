@@ -10,11 +10,21 @@ from google_aqi_service import get_historical_air_quality
 
 app = Flask('leitura')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# Configura o SQLAlchemy para rastrear modificações dos objetos, o que não é recomendado para produção.
-# O SQLAlchemy cria e modifica todos os dados da nossa tabela de forma automatica 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:Senai%40134@127.0.0.1/db_aqi'
-# Configura a URI de conexão com o banco de dados MySQL.
-# Senha -> senai@134, porém aqui a senha passa a ser -> senai%40134
+
+# app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://grupo8:Senai%40134@projeto-integrador-grupo8.mysql.database.azure.com/db_aqi'
+server_name = 'projeto-integrador-grupo8.mysql.database.azure.com'
+port='3306'
+username = 'grupo8'
+password = 'Senai%40134'
+database = 'db_aqi'
+
+certificado = 'DigiCertGlobalRootG2.crt.pem'
+
+uri = f"mysql://{username}:{password}@{server_name}:{port}/{database}"
+ssl_certificado = f"?ssl_ca={certificado}"
+
+app.config['SQLALCHEMY_DATABASE_URI'] = uri + ssl_certificado
+
 app.config['SQLALCHEMY_ECHO'] = True  # Habilita o log de SQLAlchemy
 
 mybd = SQLAlchemy(app)
@@ -105,31 +115,49 @@ def on_message(client, userdata, msg):
                 # 2. Inserir dados na tabela tb_poluentes
                 # A API do Google não retorna valores numéricos para poluentes, apenas os dados do poluente dominante.
                 # Inserimos apenas o poluente dominante com valor NULL, pois o valor não é fornecido.
-                dominant_pollutant_code = quality_index.get('dominantPollutant')
-                if dominant_pollutant_code:
-                    dominant_pollutant = Poluentes(
-                        idLeitura=id_leitura,
-                        nome=dominant_pollutant_code,
-                        valor=None,  # O valor numérico não é fornecido pela API do Google
-                        unidade=None
-                    )
-                    mybd.session.add(dominant_pollutant)
-                    print(f"Poluente dominante inserido com sucesso (ID Leitura: {id_leitura})")
+                pollutants = info.get('pollutants', [])
+
+                # Iterando sobre a lista de poluentes
+                for pollutant in pollutants:
+                    try:
+                        # Criando o objeto Poluentes para cada poluente
+                        pollutant_data = Poluentes(
+                            idLeitura=id_leitura,
+                            nome=pollutant.get('displayName'),
+                            valor=pollutant.get('concentration', {}).get('value'),
+                            unidade=pollutant.get('concentration', {}).get('units'),
+                        )
+
+                        # Adicionando o poluente na sessão do banco de dados
+                        mybd.session.add(pollutant_data)
+                        mybd.session.commit()
+                        print(f"Poluente '{pollutant.get('displayName')}' inserido com sucesso (ID Leitura: {id_leitura})")
+
+                    except Exception as e:
+                        # Caso ocorra um erro, ele será capturado e mostrado
+                        print(f"Erro ao inserir poluente '{pollutant.get('displayName')}': {e}")
+
 
                 # 3. Inserir dados na tabela tb_recomendacao
                 recommendations = info.get('healthRecommendations', {})
                 for publico_alvo, recomendacao in recommendations.items():
-                    recomendacao_data = Recomendacao(
-                        idLeitura=id_leitura,
-                        publico_alvo=publico_alvo,
-                        recomendacao=recomendacao
-                    )
-                    mybd.session.add(recomendacao_data)
-                    print(f"Recomendação para '{publico_alvo}' inserida com sucesso (ID Leitura: {id_leitura})")
+                    try:
+                        # Criando o objeto Recomendacao para cada público-alvo
+                        recomendacao_data = Recomendacao(
+                            idLeitura=id_leitura,
+                            publico_alvo=publico_alvo,
+                            recomendacao=recomendacao
+                        )
+    
+                        # Adicionando a recomendação na sessão do banco de dados
+                        mybd.session.add(recomendacao_data)
+                        mybd.session.commit()
+                        print(f"Recomendação para '{publico_alvo}' inserida com sucesso (ID Leitura: {id_leitura})")
+    
+                    except Exception as e:
+                        # Caso ocorra um erro, ele será capturado e mostrado
+                        print(f"Erro ao inserir recomendação para '{publico_alvo}': {e}")
 
-                # Confirma todas as inserções
-                mybd.session.commit()
-                print("Dados da API do Google inseridos com sucesso")
 
             # ***************************************************************
             # Fim da nova lógica
