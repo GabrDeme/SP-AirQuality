@@ -6,9 +6,9 @@ import pandas as pd
 
 def connection(query):
     conn = mysql.connector.connect(
-        host="127.0.0.1",
+        host="projeto-integrador-grupo8.mysql.database.azure.com",
         port="3306",
-        user="root",
+        user="grupo8",
         password="Senai@134",
         db="db_aqi"
     )
