@@ -6,6 +6,7 @@ import plotly.express as px
 from pathlib import Path
 import base64
 import datetime as dt
+import os
 
 # -------------------------------
 st.set_page_config(page_title="SP-AirQuality Dashboard", layout="wide")
@@ -374,11 +375,67 @@ elif selected == "Hospitais":
 # Aba Acompanhamento
 elif selected == "Acompanhamento":
     st.title("📧 Acompanhamento de Notícias")
-    st.subheader("Receba alertas e informações sobre a qualidade do ar diretamente no seu e-mail.")
+    st.markdown(
+        """
+        Cadastre-se para **receber alertas e informações em tempo real**
+        sobre a qualidade do ar diretamente no seu e-mail.
+        """
+    )
 
-    email = st.text_input("Digite seu e-mail:", placeholder="exemplo@empresa.com")
-    if st.button("Inscrever"):
-        if email:
-            st.success(f"E-mail '{email}' registrado com sucesso! ✅")
+    # Campo de e-mail
+    email = st.text_input("📨 Digite seu e-mail:", placeholder="exemplo@empresa.com")
+
+    # Campo de público-alvo
+    publico_opcoes = [
+        "generalPopulation",
+        "elderly",
+        "lungDiseasePopulation",
+        "heartDiseasePopulation",
+        "athletes",
+        "pregnantWomen",
+        "children"
+    ]
+    publico_selecionado = st.multiselect("🎯 Selecione seu público-alvo:", publico_opcoes)
+
+    if st.button("✅ Inscrever"):
+        # Validação básica de e-mail
+        if email and "@" in email and "." in email.split("@")[-1]:
+            if not publico_selecionado:
+                st.error("❌ Por favor, selecione pelo menos um público-alvo.")
+            else:
+                # Cria pasta 'bd_e-mails' se não existir
+                if not os.path.exists("bd_e-mails"):
+                    os.makedirs("bd_e-mails")
+
+                # Caminho do arquivo Excel
+                file_path = "bd_e-mails/emails.xlsx"
+
+                # Carrega ou cria DataFrame
+                if os.path.exists(file_path):
+                    df_emails = pd.read_excel(file_path)
+                else:
+                    df_emails = pd.DataFrame(columns=["email", "data_inscricao", "publico_alvo"])
+
+                # Verifica duplicidade de e-mail + público
+                duplicado = df_emails[
+                    (df_emails["email"] == email) &
+                    (df_emails["publico_alvo"] == ", ".join(publico_selecionado))
+                ]
+                if not duplicado.empty:
+                    st.warning(f"⚠️ O e-mail '{email}' já está cadastrado para este público.")
+                else:
+                    # Cria novo registro
+                    novo_registro = pd.DataFrame({
+                        "email": [email],
+                        "data_inscricao": [dt.datetime.now()],
+                        "publico_alvo": [", ".join(publico_selecionado)]
+                    })
+
+                    # Concatena e salva
+                    df_emails = pd.concat([df_emails, novo_registro], ignore_index=True)
+                    df_emails.to_excel(file_path, index=False)
+
+                    st.success(f"🎉 E-mail '{email}' registrado com sucesso!")
+                    st.info("Você receberá alertas periódicos sobre a qualidade do ar.")
         else:
-            st.error("Por favor, insira um e-mail válido.")
+            st.error("❌ Por favor, insira um e-mail válido (ex: exemplo@dominio.com).")
