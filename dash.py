@@ -5,8 +5,9 @@ import pandas as pd
 import plotly.express as px
 from pathlib import Path
 import base64
-from datetime import datetime
+import datetime as dt
 
+# -------------------------------
 st.set_page_config(page_title="SP-AirQuality Dashboard", layout="wide")
 
 # -------------------------------
@@ -16,7 +17,7 @@ def load_data(query):
     return connection(query)
 
 # -------------------------------
-# Queries para cada tabela
+# Queries
 queries = {
     "leituras": "SELECT * FROM tb_leituras",
     "qualidade": "SELECT * FROM tb_qualidade",
@@ -33,10 +34,9 @@ def carregar_todas_tabelas():
     return data
 
 # -------------------------------
-# Carregar dados inicialmente (com cache)
+# Carregar dados inicialmente
 dfs = {key: load_data(q) for key, q in queries.items()}
 
-# -------------------------------
 # Botão para atualizar todos os dados
 if st.sidebar.button("🔄 Atualizar Dados"):
     dfs = carregar_todas_tabelas()
@@ -54,14 +54,15 @@ def img_to_html(path, width=50, height=50):
     return f'<img src="data:{mime};base64,{encoded}" style="width:{width}px;height:{height}px;margin-right:10px;border-radius:5px;">'
 
 # -------------------------------
-# Menu lateral
+# Menu lateral (uma única vez)
 with st.sidebar:
     selected = option_menu(
         menu_title="Menu",
-        options=["Página Inicial", "Leituras", "Qualidade", "Poluentes"],
-        icons=["house", "wind", "bar-chart-line", "droplet"],
+        options=["Página Inicial", "Leituras", "Qualidade", "Hospitais", "Acompanhamento"],
+        icons=["house", "wind", "bar-chart-line", "hospital","activity"],
         menu_icon="cast",
-        default_index=0
+        default_index=0,
+        key="menu_lateral"
     )
 
 # -------------------------------
@@ -107,7 +108,6 @@ if selected == "Página Inicial":
                 <div><strong>{card['titulo']}</strong><br>{card['descricao']}</div>
             </div>
             """, unsafe_allow_html=True)
-    st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
 
 # -------------------------------
 # Página Leituras
@@ -115,15 +115,14 @@ elif selected == "Leituras":
     st.title("📊 Dados coletados via dispositivo")
     st.subheader(
         "Realizar a coleta de dados da qualidade do ar por meio de um dispositivo desenvolvido por alunos e professores do SENAI 🏫🤝. "
-        "O equipamento é capaz de captar informações ambientais 🌱🌍 e transmiti-las via Wi-Fi 📡 para um banco de dados centralizado 💾, permitindo o armazenamento e análise em tempo real. "
-        "Dessa forma, busca-se disponibilizar informações confiáveis para apoiar a saúde da população 🫁❤️ e subsidiar ações ambientais e educativas."
+        "O equipamento capta informações ambientais 🌱🌍 e envia via Wi-Fi 📡 para um banco de dados centralizado 💾, permitindo análise em tempo real."
     )
 
-    df = dfs['leituras']
+    df = dfs['leituras'].copy()
     df['data_hora'] = pd.to_datetime(df['data_hora'])
 
     if not df.empty:
-        ultimo = df.sort_values('data_hora', ascending=True).iloc[-1]
+        ultimo = df.sort_values('data_hora').iloc[-1]
         qtd_leituras = len(df)
         co2 = ultimo['co2'] if not pd.isna(ultimo['co2']) else 0
         umidade = ultimo['umidade'] if not pd.isna(ultimo['umidade']) else 0
@@ -132,10 +131,10 @@ elif selected == "Leituras":
         qtd_leituras = co2 = umidade = temp = 0
 
     cards = [
-        {"titulo":"Qtd Leituras","descricao":qtd_leituras,"img":"image/card10.gif"},
-        {"titulo":"CO₂ Atual","descricao":f"{co2:.2f}","img":"image/card8.gif"},
-        {"titulo":"Umidade Atual","descricao":f"{umidade:.2f}","img":"image/card2.gif"},
-        {"titulo":"Temperatura Atual","descricao":f"{temp:.2f}","img":"image/card3.gif"},
+        {"titulo": "Qtd Leituras", "descricao": qtd_leituras, "img": "image/card10.gif"},
+        {"titulo": "CO₂ Atual", "descricao": f"{co2:.2f}", "img": "image/card8.gif"},
+        {"titulo": "Umidade Atual", "descricao": f"{umidade:.2f}", "img": "image/card2.gif"},
+        {"titulo": "Temperatura Atual", "descricao": f"{temp:.2f}", "img": "image/card3.gif"},
     ]
 
     cols = st.columns(len(cards))
@@ -143,35 +142,84 @@ elif selected == "Leituras":
         with cols[idx]:
             img_html = img_to_html(card["img"])
             st.markdown(f"""
-            <div style=" border:1px solid #B0C4DE; border-radius:10px; padding:10px; display:flex; align-items:center; background-color:#B0C4DE;">
+            <div style="border:1px solid #B0C4DE; border-radius:10px; padding:10px; display:flex; align-items:center; background-color:#B0C4DE;">
                 {img_html}
                 <div><strong>{card['titulo']}</strong><br>{card['descricao']}</div>
             </div>
             """, unsafe_allow_html=True)
 
     if not df.empty:
-        st.subheader("🔍 Análises individuais Temperatura, CO₂ e Umidade")
+        st.subheader("📅 Filtro de Período e Horário")
+
+        min_date = df['data_hora'].dt.date.min()
+        max_date = df['data_hora'].dt.date.max()
+
+        selected_range = st.date_input(
+            "Selecione o período:",
+            value=[min_date, max_date],
+            min_value=min_date,
+            max_value=max_date
+        )
+
+        start_time, end_time = st.slider(
+            "Selecione a faixa de horário:",
+            value=(dt.time(0,0), dt.time(23,59)),
+            format="HH:mm"
+        )
+
+        start_date, end_date = (selected_range[0], selected_range[1]) if len(selected_range)==2 else (selected_range[0], selected_range[0])
+
+        mask = (
+            (df['data_hora'].dt.date >= start_date) &
+            (df['data_hora'].dt.date <= end_date) &
+            (df['data_hora'].dt.time >= start_time) &
+            (df['data_hora'].dt.time <= end_time)
+        )
+        df_filtered = df[mask]
+
+        # Gráficos individuais
+        st.subheader("🔍 Análises individuais")
         col1, col2, col3 = st.columns(3)
+
         with col1:
-            fig_temp = px.line(df, x="data_hora", y="temperatura", title="Temperatura (°C)")
+            fig_temp = px.line(df_filtered, x="data_hora", y="temperatura", title="Temperatura (°C)")
             st.plotly_chart(fig_temp, use_container_width=True)
+
         with col2:
-            fig_co2 = px.line(df, x="data_hora", y="co2", title="CO₂ (ppm)", line_shape='linear', color_discrete_sequence=['red'])
+            fig_co2 = px.line(df_filtered, x="data_hora", y="co2", title="CO₂ (ppm)", color_discrete_sequence=['red'])
             st.plotly_chart(fig_co2, use_container_width=True)
+
         with col3:
-            fig_umid = px.line(df, x="data_hora", y="umidade", title="Umidade (%)", line_shape='linear', color_discrete_sequence=['blue'])
+            fig_umid = px.line(df_filtered, x="data_hora", y="umidade", title="Umidade (%)", color_discrete_sequence=['blue'])
             st.plotly_chart(fig_umid, use_container_width=True)
 
-        st.subheader("🔍 Comparativo entre Temperatura, CO₂ e Umidade")
+        # Gráficos comparativos e poluentes
+        st.subheader("🔍 Comparativo de Variáveis e Poluentes")
         col4, col5 = st.columns(2)
+
         with col4:
-            fig_comp = px.line(df, x="data_hora", y=["temperatura", "co2", "umidade"], labels={"value":"Medida","variable":"Variável"}, title="Comparativo de Leituras")
+            fig_comp = px.line(df_filtered, x="data_hora", y=["temperatura","co2","umidade"], labels={"value":"Medida","variable":"Variável"}, title="Comparativo de Leituras")
             st.plotly_chart(fig_comp, use_container_width=True)
+
         with col5:
-            df['data'] = df['data_hora'].dt.date
-            daily_avg = df.groupby('data')[["temperatura","co2","umidade"]].mean().reset_index()
-            fig_daily = px.line(daily_avg, x="data", y=["temperatura","co2","umidade"], labels={"value":"Média","variable":"Variável"}, title="Médias diárias de Temperatura, CO₂ e Umidade")
-            st.plotly_chart(fig_daily, use_container_width=True)
+            df_poluentes = dfs["poluentes"].copy()
+            df_leituras = dfs["leituras"][["idLeitura","data_hora"]].copy()
+            df_poluentes = df_poluentes.merge(df_leituras, on="idLeitura", how="left")
+            df_poluentes['data_hora'] = pd.to_datetime(df_poluentes['data_hora'])
+
+            mask_pol = (
+                (df_poluentes['data_hora'].dt.date >= start_date) &
+                (df_poluentes['data_hora'].dt.date <= end_date) &
+                (df_poluentes['data_hora'].dt.time >= start_time) &
+                (df_poluentes['data_hora'].dt.time <= end_time)
+            )
+            df_poluentes_filtered = df_poluentes[mask_pol]
+
+            if not df_poluentes_filtered.empty:
+                fig_pol = px.bar(df_poluentes_filtered, y="nome", x="valor", color="unidade", orientation="h", title="Concentração por Poluente")
+                st.plotly_chart(fig_pol, use_container_width=True)
+            else:
+                st.info("Nenhum dado de poluentes disponível para o período selecionado.")
 
 # -------------------------------
 # Página Qualidade
@@ -179,7 +227,7 @@ elif selected == "Qualidade":
     st.title("📈 Qualidade do Ar")
 
     df_qualidade = dfs['qualidade'].copy()
-    df_leituras = dfs['leituras'][['idLeitura', 'data_hora']].copy()
+    df_leituras = dfs['leituras'][['idLeitura','data_hora']].copy()
     df_recomendacoes = dfs['recomendacoes'].copy()
 
     df_qualidade = df_qualidade.merge(df_leituras, on='idLeitura', how='left')
@@ -189,7 +237,7 @@ elif selected == "Qualidade":
     df_recomendacoes['data_hora'] = pd.to_datetime(df_recomendacoes['data_hora'])
 
     if not df_qualidade.empty:
-        ultimo = df_qualidade.sort_values('data_hora', ascending=True).iloc[-1]
+        ultimo = df_qualidade.sort_values('data_hora').iloc[-1]
         qtd_registros = len(df_qualidade)
         aqi = ultimo['aqi'] if not pd.isna(ultimo['aqi']) else 0
         co2 = ultimo['co2'] if 'co2' in ultimo and not pd.isna(ultimo['co2']) else 0
@@ -209,38 +257,27 @@ elif selected == "Qualidade":
         with cols[idx]:
             img_html = img_to_html(card["img"])
             st.markdown(f"""
-            <div style=" border:1px solid #B0C4DE; border-radius:10px; padding:10px; display:flex; align-items:center; background-color:#B0C4DE;">
+            <div style="border:1px solid #B0C4DE; border-radius:10px; padding:10px; display:flex; align-items:center; background-color:#B0C4DE;">
                 {img_html}
                 <div><strong>{card['titulo']}</strong><br>{card['descricao']}</div>
             </div>
             """, unsafe_allow_html=True)
 
-    # -------------------
     # Filtros na sidebar
     st.sidebar.header("🔍 Filtros")
     min_data = df_recomendacoes['data_hora'].min().date()
     max_data = df_recomendacoes['data_hora'].max().date()
     periodo = st.sidebar.date_input("Período", [min_data, max_data])
+    start_date, end_date = periodo if len(periodo)==2 else (periodo[0], periodo[0])
+    hora_ini = st.sidebar.time_input("Hora inicial", value=dt.time(0,0))
+    hora_fim = st.sidebar.time_input("Hora final", value=dt.time(23,59))
+    start_datetime = dt.datetime.combine(start_date, hora_ini)
+    end_datetime = dt.datetime.combine(end_date, hora_fim)
 
-    # Tratativa de erro para período com apenas uma data
-    if isinstance(periodo, (tuple, list)):
-        if len(periodo) == 1:
-            start_date = end_date = periodo[0]
-        else:
-            start_date, end_date = periodo[0], periodo[1]
-    else:
-        start_date = end_date = periodo
-
-    hora_ini = st.sidebar.time_input("Hora inicial", value=pd.to_datetime("00:00:00").time())
-    hora_fim = st.sidebar.time_input("Hora final", value=pd.to_datetime("23:59:59").time())
-
-    start_datetime = datetime.combine(start_date, hora_ini)
-    end_datetime = datetime.combine(end_date, hora_fim)
-
-    todos_publicos = ['athletes', 'children', 'elderly', 'generalPopulation', 'heartDiseasePopulation', 'lungDiseasePopulation', 'pregnantWomen']
+    todos_publicos = ['athletes','children','elderly','generalPopulation','heartDiseasePopulation','lungDiseasePopulation','pregnantWomen']
     publico_sel = st.sidebar.multiselect("Público-alvo", todos_publicos, default=todos_publicos)
 
-    mask = ((df_recomendacoes['data_hora'] >= start_datetime) &
+    mask = ((df_recomendacoes['data_hora'] >= start_datetime) & 
             (df_recomendacoes['data_hora'] <= end_datetime) &
             (df_recomendacoes['publico_alvo'].isin(publico_sel)))
     df_filtrado = df_recomendacoes.loc[mask]
@@ -248,7 +285,7 @@ elif selected == "Qualidade":
     st.subheader("✨ Últimas Recomendações")
     ultimas_dict = {}
     for publico in publico_sel:
-        df_pub = df_filtrado[df_filtrado['publico_alvo'] == publico]
+        df_pub = df_filtrado[df_filtrado['publico_alvo']==publico]
         if not df_pub.empty:
             ultimas_dict[publico] = df_pub.sort_values('data_hora', ascending=False).iloc[0]
         else:
@@ -264,10 +301,47 @@ elif selected == "Qualidade":
         """, unsafe_allow_html=True)
 
 # -------------------------------
-# Página Poluentes
-elif selected == "Poluentes":
-    st.title("💨 Poluentes")
-    df = dfs['poluentes']
-    if not df.empty:
-        fig = px.bar(df, x="nome", y="valor", color="unidade", title="Concentração por Poluente")
-        st.plotly_chart(fig, use_container_width=True)
+# Aba Hospitais
+elif selected == "Hospitais":
+    st.title("🏥 Hospitais Próximos")
+    st.subheader("Digite seu CEP para encontrar os hospitais mais próximos")
+
+    # Campo para digitar o CEP
+    cep = st.text_input("CEP:", placeholder="00000-000")
+
+    # Dados fictícios de hospitais
+    hospital_data = pd.DataFrame({
+        'Nome': ['Hospital A', 'Hospital B', 'Hospital C'],
+        'CEP': ['01001-000', '01002-000', '01003-000'],
+        'Latitude': [-23.55052, -23.5629, -23.5645],
+        'Longitude': [-46.633308, -46.6544, -46.6522]
+    })
+
+    if st.button("Buscar hospitais"):
+        if cep:
+            # Filtra hospitais pelo CEP exato ou próximo
+            hospitais_proximos = hospital_data[hospital_data['CEP'].str.startswith(cep[:5])]
+
+            if not hospitais_proximos.empty:
+                st.markdown("### Hospitais encontrados:")
+                st.dataframe(hospitais_proximos[['Nome', 'CEP']])
+
+                # Mostra no mapa
+                st.subheader("Mapa dos Hospitais Próximos")
+                st.map(hospitais_proximos.rename(columns={'Latitude':'lat', 'Longitude':'lon'}))
+            else:
+                st.warning("Nenhum hospital encontrado próximo ao CEP informado.")
+        else:
+            st.error("Por favor, informe um CEP válido.")
+# -------------------------------
+# Aba Acompanhamento
+elif selected == "Acompanhamento":
+    st.title("📧 Acompanhamento de Notícias")
+    st.subheader("Receba alertas e informações sobre a qualidade do ar diretamente no seu e-mail.")
+
+    email = st.text_input("Digite seu e-mail:", placeholder="exemplo@empresa.com")
+    if st.button("Inscrever"):
+        if email:
+            st.success(f"E-mail '{email}' registrado com sucesso! ✅")
+        else:
+            st.error("Por favor, insira um e-mail válido.")
