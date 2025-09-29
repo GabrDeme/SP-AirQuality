@@ -118,9 +118,11 @@ elif selected == "Leituras":
         "O equipamento capta informações ambientais 🌱🌍 e envia via Wi-Fi 📡 para um banco de dados centralizado 💾, permitindo análise em tempo real."
     )
 
+    # --- Carregar dados ---
     df = dfs['leituras'].copy()
     df['data_hora'] = pd.to_datetime(df['data_hora'])
 
+    # --- Últimos valores ---
     if not df.empty:
         ultimo = df.sort_values('data_hora').iloc[-1]
         qtd_leituras = len(df)
@@ -130,6 +132,7 @@ elif selected == "Leituras":
     else:
         qtd_leituras = co2 = umidade = temp = 0
 
+    # --- Cards ---
     cards = [
         {"titulo": "Qtd Leituras", "descricao": qtd_leituras, "img": "image/card10.gif"},
         {"titulo": "CO₂ Atual", "descricao": f"{co2:.2f}", "img": "image/card8.gif"},
@@ -148,78 +151,101 @@ elif selected == "Leituras":
             </div>
             """, unsafe_allow_html=True)
 
-    if not df.empty:
-        st.subheader("📅 Filtro de Período e Horário")
+    # --- Filtros na sidebar ---
+    st.sidebar.header("🔍 Filtros")
+    min_data = df['data_hora'].dt.date.min()
+    max_data = df['data_hora'].dt.date.max()
+    selected_range = st.sidebar.date_input("Período", [min_data, max_data], min_value=min_data, max_value=max_data)
+    
+    start_date, end_date = (selected_range[0], selected_range[1]) if len(selected_range) == 2 else (selected_range[0], selected_range[0])
+    
+    start_time, end_time = st.sidebar.slider(
+        "Faixa de horário",
+        value=(dt.time(0,0), dt.time(23,59)),
+        format="HH:mm"
+    )
 
-        min_date = df['data_hora'].dt.date.min()
-        max_date = df['data_hora'].dt.date.max()
+    # --- Filtra leituras ---
+    mask = (
+        (df['data_hora'].dt.date >= start_date) &
+        (df['data_hora'].dt.date <= end_date) &
+        (df['data_hora'].dt.time >= start_time) &
+        (df['data_hora'].dt.time <= end_time)
+    )
+    df_filtered = df[mask].copy()
 
-        selected_range = st.date_input(
-            "Selecione o período:",
-            value=[min_date, max_date],
-            min_value=min_date,
-            max_value=max_date
-        )
+    # Formata data_hora para exibir nos gráficos
+    if not df_filtered.empty:
+        df_filtered['data_hora_str'] = df_filtered['data_hora'].dt.strftime('%d/%m/%Y %H:%M')
 
-        start_time, end_time = st.slider(
-            "Selecione a faixa de horário:",
-            value=(dt.time(0,0), dt.time(23,59)),
-            format="HH:mm"
-        )
+    # --- Gráficos individuais ---
+    st.subheader("🔍 Análises individuais")
+    col1, col2, col3 = st.columns(3)
 
-        start_date, end_date = (selected_range[0], selected_range[1]) if len(selected_range)==2 else (selected_range[0], selected_range[0])
-
-        mask = (
-            (df['data_hora'].dt.date >= start_date) &
-            (df['data_hora'].dt.date <= end_date) &
-            (df['data_hora'].dt.time >= start_time) &
-            (df['data_hora'].dt.time <= end_time)
-        )
-        df_filtered = df[mask]
-
-        # Gráficos individuais
-        st.subheader("🔍 Análises individuais")
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            fig_temp = px.line(df_filtered, x="data_hora", y="temperatura", title="Temperatura (°C)")
+    with col1:
+        if not df_filtered.empty:
+            fig_temp = px.line(df_filtered, x="data_hora_str", y="temperatura", title="Temperatura (°C)")
             st.plotly_chart(fig_temp, use_container_width=True)
+        else:
+            st.info("Nenhum dado de temperatura disponível para o período selecionado.")
 
-        with col2:
-            fig_co2 = px.line(df_filtered, x="data_hora", y="co2", title="CO₂ (ppm)", color_discrete_sequence=['red'])
+    with col2:
+        if not df_filtered.empty:
+            fig_co2 = px.line(df_filtered, x="data_hora_str", y="co2", title="CO₂ (ppm)", color_discrete_sequence=['red'])
             st.plotly_chart(fig_co2, use_container_width=True)
+        else:
+            st.info("Nenhum dado de CO₂ disponível para o período selecionado.")
 
-        with col3:
-            fig_umid = px.line(df_filtered, x="data_hora", y="umidade", title="Umidade (%)", color_discrete_sequence=['blue'])
+    with col3:
+        if not df_filtered.empty:
+            fig_umid = px.line(df_filtered, x="data_hora_str", y="umidade", title="Umidade (%)", color_discrete_sequence=['blue'])
             st.plotly_chart(fig_umid, use_container_width=True)
+        else:
+            st.info("Nenhum dado de umidade disponível para o período selecionado.")
 
-        # Gráficos comparativos e poluentes
-        st.subheader("🔍 Comparativo de Variáveis e Poluentes")
-        col4, col5 = st.columns(2)
+    # --- Gráficos comparativos e poluentes ---
+    st.subheader("🔍 Comparativo de Variáveis e Poluentes")
+    col4, col5 = st.columns(2)
 
-        with col4:
-            fig_comp = px.line(df_filtered, x="data_hora", y=["temperatura","co2","umidade"], labels={"value":"Medida","variable":"Variável"}, title="Comparativo de Leituras")
-            st.plotly_chart(fig_comp, use_container_width=True)
-
-        with col5:
-            df_poluentes = dfs["poluentes"].copy()
-            df_leituras = dfs["leituras"][["idLeitura","data_hora"]].copy()
-            df_poluentes = df_poluentes.merge(df_leituras, on="idLeitura", how="left")
-            df_poluentes['data_hora'] = pd.to_datetime(df_poluentes['data_hora'])
-
-            mask_pol = (
-                (df_poluentes['data_hora'].dt.date >= start_date) &
-                (df_poluentes['data_hora'].dt.date <= end_date) &
-                (df_poluentes['data_hora'].dt.time >= start_time) &
-                (df_poluentes['data_hora'].dt.time <= end_time)
+    with col4:
+        if not df_filtered.empty:
+            fig_comp = px.line(
+                df_filtered,
+                x="data_hora_str",
+                y=["temperatura", "co2", "umidade"],
+                labels={"value":"Medida","variable":"Variável"},
+                title="Comparativo de Leituras"
             )
-            df_poluentes_filtered = df_poluentes[mask_pol]
+            st.plotly_chart(fig_comp, use_container_width=True)
+        else:
+            st.info("Nenhum dado disponível para o comparativo de variáveis no período selecionado.")
 
-            if not df_poluentes_filtered.empty:
-                fig_pol = px.bar(df_poluentes_filtered, y="nome", x="valor", color="unidade", orientation="h", title="Concentração por Poluente")
-                st.plotly_chart(fig_pol, use_container_width=True)
-            else:
-                st.info("Nenhum dado de poluentes disponível para o período selecionado.")
+    with col5:
+        df_poluentes = dfs["poluentes"].copy()
+        df_leituras = dfs["leituras"][["idLeitura","data_hora"]].copy()
+        df_poluentes = df_poluentes.merge(df_leituras, on="idLeitura", how="left")
+        df_poluentes['data_hora'] = pd.to_datetime(df_poluentes['data_hora'])
+
+        mask_pol = (
+            (df_poluentes['data_hora'].dt.date >= start_date) &
+            (df_poluentes['data_hora'].dt.date <= end_date) &
+            (df_poluentes['data_hora'].dt.time >= start_time) &
+            (df_poluentes['data_hora'].dt.time <= end_time)
+        )
+        df_poluentes_filtered = df_poluentes[mask_pol]
+
+        if not df_poluentes_filtered.empty:
+            fig_pol = px.bar(
+                df_poluentes_filtered,
+                y="nome",
+                x="valor",
+                color="unidade",
+                orientation="h",
+                title="Concentração por Poluente"
+            )
+            st.plotly_chart(fig_pol, use_container_width=True)
+        else:
+            st.info("Nenhum dado de poluentes disponível para o período selecionado.")
 
 # -------------------------------
 # Página Qualidade
@@ -230,12 +256,14 @@ elif selected == "Qualidade":
     df_leituras = dfs['leituras'][['idLeitura','data_hora']].copy()
     df_recomendacoes = dfs['recomendacoes'].copy()
 
+    # Merge para trazer timestamp das leituras
     df_qualidade = df_qualidade.merge(df_leituras, on='idLeitura', how='left')
     df_recomendacoes = df_recomendacoes.merge(df_leituras, on='idLeitura', how='left')
 
     df_qualidade['data_hora'] = pd.to_datetime(df_qualidade['data_hora'])
     df_recomendacoes['data_hora'] = pd.to_datetime(df_recomendacoes['data_hora'])
 
+    # Últimos valores
     if not df_qualidade.empty:
         ultimo = df_qualidade.sort_values('data_hora').iloc[-1]
         qtd_registros = len(df_qualidade)
@@ -245,6 +273,7 @@ elif selected == "Qualidade":
     else:
         qtd_registros = aqi = co2 = temp = 0
 
+    # Cards
     cards = [
         {"titulo":"Qtd Registros", "descricao": qtd_registros, "img":"image/card10.gif"},
         {"titulo":"AQI Atual", "descricao": f"{aqi:.1f}", "img":"image/card11.gif"},
@@ -263,42 +292,49 @@ elif selected == "Qualidade":
             </div>
             """, unsafe_allow_html=True)
 
-    # Filtros na sidebar
+    # --- Filtros de período na sidebar ---
     st.sidebar.header("🔍 Filtros")
     min_data = df_recomendacoes['data_hora'].min().date()
     max_data = df_recomendacoes['data_hora'].max().date()
     periodo = st.sidebar.date_input("Período", [min_data, max_data])
     start_date, end_date = periodo if len(periodo)==2 else (periodo[0], periodo[0])
-    hora_ini = st.sidebar.time_input("Hora inicial", value=dt.time(0,0))
-    hora_fim = st.sidebar.time_input("Hora final", value=dt.time(23,59))
-    start_datetime = dt.datetime.combine(start_date, hora_ini)
-    end_datetime = dt.datetime.combine(end_date, hora_fim)
 
-    todos_publicos = ['athletes','children','elderly','generalPopulation','heartDiseasePopulation','lungDiseasePopulation','pregnantWomen']
-    publico_sel = st.sidebar.multiselect("Público-alvo", todos_publicos, default=todos_publicos)
+    start_time, end_time = st.sidebar.slider(
+        "Faixa de horário",
+        value=(dt.time(0,0), dt.time(23,59)),
+        format="HH:mm"
+    )
 
+    start_datetime = dt.datetime.combine(start_date, start_time)
+    end_datetime = dt.datetime.combine(end_date, end_time)
+
+    # Filtra recomendações
     mask = ((df_recomendacoes['data_hora'] >= start_datetime) & 
-            (df_recomendacoes['data_hora'] <= end_datetime) &
-            (df_recomendacoes['publico_alvo'].isin(publico_sel)))
-    df_filtrado = df_recomendacoes.loc[mask]
+            (df_recomendacoes['data_hora'] <= end_datetime))
+    df_filtrado = df_recomendacoes.loc[mask].copy()
+
+    # Formata data_hora para exibição
+    if not df_filtrado.empty:
+        df_filtrado['data_hora_str'] = df_filtrado['data_hora'].dt.strftime('%d/%m/%Y %H:%M')
 
     st.subheader("✨ Últimas Recomendações")
-    ultimas_dict = {}
-    for publico in publico_sel:
-        df_pub = df_filtrado[df_filtrado['publico_alvo']==publico]
-        if not df_pub.empty:
-            ultimas_dict[publico] = df_pub.sort_values('data_hora', ascending=False).iloc[0]
-        else:
-            ultimas_dict[publico] = {'data_hora': None, 'recomendacao': "Sem recomendação disponível"}
 
-    for publico in publico_sel:
-        row = ultimas_dict[publico]
-        st.markdown(f"""
-        <div style="border:1px solid #ddd; border-radius:8px; padding:8px; margin-bottom:5px; background:#f9f9f9;">
-            <strong>{publico}</strong> — <em>{row['data_hora'] if row['data_hora'] else ''}</em><br>
-            {row['recomendacao']}
-        </div>
-        """, unsafe_allow_html=True)
+    if not df_filtrado.empty:
+        # Obtém os últimos registros por público
+        ultimas_dict = {}
+        for publico in df_filtrado['publico_alvo'].unique():
+            df_pub = df_filtrado[df_filtrado['publico_alvo'] == publico]
+            ultimas_dict[publico] = df_pub.sort_values('data_hora', ascending=False).iloc[0]
+
+        for publico, row in ultimas_dict.items():
+            st.markdown(f"""
+            <div style="border:1px solid #ddd; border-radius:8px; padding:8px; margin-bottom:5px; background:#f9f9f9;">
+                <strong>{publico}</strong> — <em>{row['data_hora_str']}</em><br>
+                {row['recomendacao']}
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.info("Nenhuma recomendação disponível para o período selecionado.")
 
 # -------------------------------
 # Aba Hospitais
@@ -333,6 +369,7 @@ elif selected == "Hospitais":
                 st.warning("Nenhum hospital encontrado próximo ao CEP informado.")
         else:
             st.error("Por favor, informe um CEP válido.")
+
 # -------------------------------
 # Aba Acompanhamento
 elif selected == "Acompanhamento":
