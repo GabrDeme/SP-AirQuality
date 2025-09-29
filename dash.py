@@ -309,6 +309,42 @@ elif selected == "Qualidade":
                 {row['recomendacao']}
             </div>
         """, unsafe_allow_html=True)
+    
+    # ===================================================================
+    # Seção de Inscrição para Alertas por E-mail
+    # ===================================================================
+    st.subheader("📬 Inscreva-se para Receber Alertas")
+
+    path_excel_emails = "emails_alertas.xlsx"
+
+    with st.form("email_form", clear_on_submit=True):
+        email_usuario = st.text_input(
+            "Digite seu e-mail para receber recomendações importantes:",
+            placeholder="seu.email@exemplo.com"
+        )
+    
+        submitted = st.form_submit_button("Inscrever!")
+
+        if submitted:
+            if email_usuario and "@" in email_usuario and "." in email_usuario:
+
+                try:
+                    df_emails = pd.read_excel(path_excel_emails)
+                except FileNotFoundError:
+                    df_emails = pd.DataFrame(columns=['email'])
+                
+                if email_usuario in df_emails['email'].values:
+                    st.warning("Este e-mail já está cadastrado!")
+                else:
+
+                    novo_email_df = pd.DataFrame([{'email': email_usuario}])
+                    df_emails = pd.concat([df_emails, novo_email_df], ignore_index=True)
+
+                    df_emails.to_excel(path_excel_emails, index=False)
+                    
+                    st.success("Inscrição realizada com sucesso! ✅")
+            else:
+                st.error("Por favor, digite um endereço de e-mail válido.")
 
 # -------------------------------
 # Página Poluentes
